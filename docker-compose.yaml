@@ -1,0 +1,60 @@
+# Local/staging stack: gateway + SuperTokens Core + Postgres for Core.
+# NOTE: not validated here (no Docker available when written); run `docker compose config`
+# and `docker compose up --build` before relying on it.
+#
+# Required in your shell or an env file (no defaults on purpose):
+#   POSTGRES_PASSWORD, SUPERTOKENS_API_KEY, API_KEY_HMAC_SECRET
+# Plus the rest of .env.example (domains etc.) via the project's .env file.
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: supertokens
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: supertokens
+    volumes:
+      - core-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "supertokens", "-d", "supertokens"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  supertokens:
+    image: registry.supertokens.io/supertokens/supertokens-postgresql:latest
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      POSTGRESQL_CONNECTION_URI: postgresql://supertokens:${POSTGRES_PASSWORD}@db:5432/supertokens
+      API_KEYS: ${SUPERTOKENS_API_KEY:?set SUPERTOKENS_API_KEY}
+    # Not published to the host: only the gateway talks to Core.
+    expose:
+      - "3567"
+    healthcheck:
+      test: >
+        bash -c 'exec 3<>/dev/tcp/127.0.0.1/3567 && echo -e "GET /hello HTTP/1.1\r\n\r\n" >&3
+        && cat <&3 | grep "Hello"'
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  gateway:
+    build: .
+    depends_on:
+      supertokens:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      SUPERTOKENS_CONNECTION_URI: http://supertokens:3567
+      SUPERTOKENS_API_KEY: ${SUPERTOKENS_API_KEY}
+      API_KEY_HMAC_SECRET: ${API_KEY_HMAC_SECRET:?set API_KEY_HMAC_SECRET}
+    ports:
+      - "8000:8000"
+    volumes:
+      - gateway-db:/srv/database
+
+volumes:
+  core-db:
+  gateway-db:

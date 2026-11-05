@@ -1,0 +1,7 @@
+{
+  "dependencies": {
+    "supertokens-auth-react": "^0.51.3",
+    "supertokens-node": "^24.1.0",
+    "supertokens-web-js": "^0.16.0"
+  }
+}

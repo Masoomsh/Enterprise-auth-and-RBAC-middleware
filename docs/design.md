@@ -26,6 +26,17 @@ request ──► AuditMiddleware (outermost; one row per /v1 and /admin request
 layer. Code: `app/authentication/`, `app/authorization/`, `app/middleware/audit.py`,
 `app/services/audit_service.py`.
 
+## Semantic cache integration
+
+`semantic_router.api.SemanticGateway` exposes an `APIRouter` included by `app.main`. Order for
+`POST /v1/chat/completions`: `get_identity` (401) -> authorize requested model/tools/data sources
+(403, 422 on wildcard or malformed ids) -> route among models the caller may invoke -> authorize the
+chosen model -> cache lookup scoped by `tenant|roles` -> Ollama on miss -> metrics -> audit metadata
+on `request.state.inference_meta`. Reports and feedback use `endpoint:reports` (read) and
+`endpoint:feedback` (write). `AuditMiddleware` also covers `/dashboard*` and `/reports/*`.
+Model ids may contain `:` (Ollama tags such as `qwen2.5:3b`). Known gaps: feedback is not tied to
+the submitting tenant, and `/dashboard/ui` needs a session cookie or fetch with a credential.
+
 ## Identity contract
 
 `Identity(subject, tenant, auth_method, roles, scopes, token_id)`. Every provider produces this and
@@ -48,7 +59,7 @@ carries nothing it handles, or raise `AuthenticationError` if credentials are pr
 
 | Credential | Source of truth | Carries | Lifetime |
 |---|---|---|---|
-| SuperTokens session | SuperTokens Core | `sub`, `st-role`, `tenant`, `aud` (`semantic-gateway`) | SuperTokens access-token TTL |
+| SuperTokens session | SuperTokens Core | `sub`, `st-role`, `tenant`, `gateway_aud` (`semantic-gateway`) | SuperTokens access-token TTL |
 | IdP bearer token | Corporate IdP (JWKS) | `sub`, `iss`, `aud`, `exp`, group claim, optional `scope`/`scp`, `jti` | IdP-defined |
 | API key | `api_keys` table (HMAC of secret only) | owner, role ceiling, scopes, tenant | default 90 days, max 365 |
 
@@ -78,7 +89,7 @@ logger for the SIEM.
 |---|---|
 | Browser login, sessions, refresh, CSRF | SuperTokens `emailpassword` + `session` recipes |
 | Roles in the token (`st-role`) | `userroles` recipe; assigned with `scripts/assign_role.py` or `/admin/users/{id}/roles` |
-| `aud` / `tenant` claims | session override in `app/authentication/supertokens.py` |
+| `gateway_aud` / `tenant` claims | session override in `app/authentication/supertokens.py`. Not `aud`: the SDK rejects its own tokens if they carry `aud`. |
 | Public keys for downstream verification | `jwt` recipe: `<api_domain>/auth/jwt/jwks.json` |
 | Corporate SSO in the browser | **Not wired yet.** Add the `thirdparty` recipe with the IdP as a custom OIDC provider (SAML: SuperTokens enterprise SAML or a `python3-saml` provider). Roles must then be mapped from IdP groups on sign-in. |
 | Service/API clients with IdP tokens | `OAuth2BearerProvider` (configure `OAUTH2_*`) |

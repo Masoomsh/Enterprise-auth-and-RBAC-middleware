@@ -21,7 +21,7 @@ from app.models.audit_log import AuditLog
 
 logger = logging.getLogger("audit")
 
-AUDITED_PREFIXES = ("/v1/", "/admin/")
+AUDITED_PREFIXES = ("/v1/", "/admin/", "/dashboard", "/reports/")
 
 
 def should_audit(path: str, method: str) -> bool:

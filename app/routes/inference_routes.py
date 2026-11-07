@@ -13,7 +13,7 @@ from app.services.inference_service import InferenceBackend, get_inference_backe
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/v1", tags=["inference"])
 
-_ID = r"^[A-Za-z0-9][A-Za-z0-9._/\-]{0,127}$"
+_ID = r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$"
 
 
 class Message(BaseModel):

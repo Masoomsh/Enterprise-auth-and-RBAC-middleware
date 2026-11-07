@@ -25,7 +25,7 @@ class FakeSession:
         return "handle-1"
 
     def get_access_token_payload(self):
-        return {"st-role": {"v": ["analyst"], "t": 0}, "tenant": "acme", "aud": "semantic-gateway"}
+        return {"st-role": {"v": ["analyst"], "t": 0}, "tenant": "acme", "gateway_aud": "semantic-gateway"}
 
 
 def _req(headers=None):
@@ -38,7 +38,7 @@ def test_session_provider_maps_payload_to_identity(monkeypatch):
         return FakeSession()
 
     monkeypatch.setattr(session_module, "get_session", fake_get_session)
-    provider = SuperTokensSessionProvider(Settings())
+    provider = SuperTokensSessionProvider(Settings(_env_file=None))
     identity = asyncio.run(provider.authenticate(_req([(b"cookie", b"sAccessToken=abc")])))
     assert identity == Identity(
         subject="st-user-1",
@@ -55,7 +55,7 @@ def test_session_provider_ignores_requests_without_session_credentials(monkeypat
         raise AssertionError("must not be called")
 
     monkeypatch.setattr(session_module, "get_session", boom)
-    provider = SuperTokensSessionProvider(Settings())
+    provider = SuperTokensSessionProvider(Settings(_env_file=None))
     assert asyncio.run(provider.authenticate(_req([(b"authorization", b"Bearer x.y.z")]))) is None
 
 
@@ -64,7 +64,7 @@ def test_session_provider_rejects_expired_session(monkeypatch):
         raise TryRefreshTokenError("expired")
 
     monkeypatch.setattr(session_module, "get_session", expired)
-    provider = SuperTokensSessionProvider(Settings())
+    provider = SuperTokensSessionProvider(Settings(_env_file=None))
     with pytest.raises(AuthenticationError):
         asyncio.run(provider.authenticate(_req([(b"cookie", b"sAccessToken=abc")])))
 
@@ -79,7 +79,7 @@ def test_session_without_role_claim_has_no_roles(monkeypatch):
 
     monkeypatch.setattr(session_module, "get_session", fake_get_session)
     identity = asyncio.run(
-        SuperTokensSessionProvider(Settings()).authenticate(
+        SuperTokensSessionProvider(Settings(_env_file=None)).authenticate(
             _req([(b"cookie", b"sAccessToken=abc")])
         )
     )
@@ -218,7 +218,7 @@ def test_users_only_see_and_revoke_their_own_keys(as_user):
 
 def test_keys_are_503_when_hmac_secret_not_configured(as_user):
     client, _, login = as_user
-    client.app.dependency_overrides[app_settings] = lambda: Settings()
+    client.app.dependency_overrides[app_settings] = lambda: Settings(_env_file=None)
     login("alice", ["viewer"])
     assert _create(client, roles=["viewer"]).status_code == 503
 

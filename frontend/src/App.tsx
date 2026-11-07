@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import {
   BrowserRouter,
   Link,
+  Navigate,
   Route,
   Routes,
 } from "react-router-dom";
@@ -9,6 +10,7 @@ import { signOut, useSessionContext } from "supertokens-auth-react/recipe/sessio
 import { getSuperTokensRoutesForReactRouterDom } from "supertokens-auth-react/ui";
 import { EmailPasswordPreBuiltUI } from "supertokens-auth-react/recipe/emailpassword/prebuiltui";
 import * as ReactRouterDOM from "react-router-dom";
+import SemanticCache from "./SemanticCache";
 
 type CurrentUser = {
   user_id: string;
@@ -73,6 +75,11 @@ function Home() {
     return <p className="status">Checking your session…</p>;
   }
 
+  // Signed in: go straight to the semantic cache screen.
+  if (session.doesSessionExist) {
+    return <Navigate to="/app" replace />;
+  }
+
   return (
     <main className="page">
       <section className="card">
@@ -116,6 +123,7 @@ export default function App() {
           EmailPasswordPreBuiltUI,
         ])}
         <Route path="/" element={<Home />} />
+        <Route path="/app" element={<SemanticCache />} />
       </Routes>
     </BrowserRouter>
   );

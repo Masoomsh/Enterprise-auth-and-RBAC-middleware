@@ -11,3 +11,7 @@ frontend/node_modules/
 # Local dev databases may contain real accounts and audit rows.
 *.db
 database/
+
+# Semantic gateway runtime data
+data/*
+!data/.gitkeep

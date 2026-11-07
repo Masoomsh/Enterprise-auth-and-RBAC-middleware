@@ -15,10 +15,11 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app
+COPY semantic_router ./semantic_router
 COPY policies ./policies
 COPY scripts ./scripts
 
-# Run as an unprivileged user; /srv/database is the only writable path.
+# Run as an unprivileged user; /srv/database and /srv/data are the only writable paths.
 RUN useradd --system --uid 10001 gateway \
  && mkdir -p /srv/database \
  && chown gateway /srv/database

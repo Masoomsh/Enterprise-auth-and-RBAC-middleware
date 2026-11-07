@@ -8,12 +8,12 @@ Access is **default deny**. A request is allowed only when (1) at least one of t
 
 Cells list the resource patterns the role may access. `—` means no access. `*` matches everything.
 
-| Role | Invoke models | Invoke tools | Read data sources | Write data sources | Admin functions |
-|---|---|---|---|---|---|
-| **admin** | `*` | `*` | `*` | `*` | `*` |
-| **engineer** | `model:*` | `tool:*` | `datasource:*` | — | — |
-| **analyst** | `model:small-*` | `tool:web-search`<br>`tool:sql-query` | `datasource:analytics-*` | — | — |
-| **viewer** | `model:small-*` | — | — | — | — |
+| Role | Invoke models | Invoke tools | Read data sources | Write data sources | Admin functions | Reports (read) / feedback (write) |
+|---|---|---|---|---|---|---|
+| **admin** | `*` | `*` | `*` | `*` | `*` | `*` |
+| **engineer** | `model:*` | `tool:*` | `datasource:*` | — | — | `endpoint:feedback` |
+| **analyst** | `model:small-*`<br>`model:qwen2.5:*`<br>`model:llama3.2:*` | `tool:web-search`<br>`tool:sql-query` | `datasource:analytics-*` | — | — | `endpoint:feedback`<br>`endpoint:reports` |
+| **viewer** | `model:small-*`<br>`model:qwen2.5:3b`<br>`model:llama3.2:*` | — | — | — | — | — |
 
 ## Raw grants
 
@@ -28,10 +28,17 @@ Cells list the resource patterns the role may access. `—` means no access. `*`
 | analyst | `tool:sql-query` | `invoke` |
 | analyst | `datasource:analytics-*` | `read` |
 | viewer | `model:small-*` | `invoke` |
+| analyst | `model:qwen2.5:*` | `invoke` |
+| analyst | `model:llama3.2:*` | `invoke` |
+| viewer | `model:qwen2.5:3b` | `invoke` |
+| viewer | `model:llama3.2:*` | `invoke` |
+| engineer | `endpoint:feedback` | `write` |
+| analyst | `endpoint:feedback` | `write` |
+| analyst | `endpoint:reports` | `read` |
 
 ## Resource and action vocabulary
 
-- Resources: `model:<id>`, `tool:<id>`, `datasource:<id>`, `admin:<area>` (`admin:roles`, `admin:api-keys`).
+- Resources: `model:<id>`, `tool:<id>`, `datasource:<id>`, `admin:<area>` (`admin:roles`, `admin:api-keys`), `endpoint:<name>` (`endpoint:reports`, `endpoint:feedback`).
 - Actions: `invoke`, `read`, `write`, `admin`.
 - Patterns are globs (`model:small-*`). Request-supplied identifiers may not contain wildcards.
 

@@ -46,7 +46,7 @@ def build(enforce=True):
         with factory() as session:
             yield session
 
-    settings = Settings(api_key_hmac_secret=SecretStr(SECRET), auth_enforce=enforce)
+    settings = Settings(_env_file=None, api_key_hmac_secret=SecretStr(SECRET), auth_enforce=enforce)
     app.dependency_overrides[app_settings] = lambda: settings
     app.dependency_overrides[get_providers] = lambda: [ApiKeyProvider(factory, SECRET, current_owner_roles)]
     app.dependency_overrides[get_db] = db

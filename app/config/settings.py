@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     api_key_hmac_secret: SecretStr | None = None
     # False = audit-only rollout: denials are logged as would-be denies but not enforced.
     auth_enforce: bool = True
+    # Base URL of the stand-alone semantic cache app to protect (e.g. http://127.0.0.1:8012).
+    # If unset, the embedded copy in semantic_router/ is served instead.
+    semantic_upstream_url: str | None = None
     dev_seed_email: str | None = None
     dev_seed_password: SecretStr | None = None
 

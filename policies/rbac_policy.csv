@@ -7,3 +7,11 @@ p, analyst, tool:web-search, invoke
 p, analyst, tool:sql-query, invoke
 p, analyst, datasource:analytics-*, read
 p, viewer, model:small-*, invoke
+# --- Semantic cache gateway (Ollama model names; endpoint:* guards reports and feedback) ---
+p, analyst, model:qwen2.5:*, invoke
+p, analyst, model:llama3.2:*, invoke
+p, viewer, model:qwen2.5:3b, invoke
+p, viewer, model:llama3.2:*, invoke
+p, engineer, endpoint:feedback, write
+p, analyst, endpoint:feedback, write
+p, analyst, endpoint:reports, read

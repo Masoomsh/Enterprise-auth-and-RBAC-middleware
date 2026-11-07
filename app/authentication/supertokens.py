@@ -9,7 +9,12 @@ from app.config.settings import Settings, get_settings
 
 
 def _gateway_claims_override(settings: Settings):
-    """Add the `aud` and `tenant` claims the gateway verifies to every new access token."""
+    """Add the `gateway_aud` and `tenant` claims the gateway verifies to every new access token.
+
+    Do NOT use the registered `aud` claim here: the SuperTokens SDK verifies its own access tokens
+    without an expected audience, so PyJWT rejects any token that contains `aud` ("Invalid
+    audience") and every session would fail. `gateway_aud` carries the same information safely.
+    """
 
     def override(original: SessionRecipeInterface) -> SessionRecipeInterface:
         original_create_new_session = original.create_new_session
@@ -25,7 +30,7 @@ def _gateway_claims_override(settings: Settings):
         ):
             payload = {
                 **(access_token_payload or {}),
-                "aud": settings.gateway_audience,
+                "gateway_aud": settings.gateway_audience,
                 "tenant": settings.default_tenant,
             }
             return await original_create_new_session(

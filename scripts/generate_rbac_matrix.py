@@ -20,6 +20,7 @@ COLUMNS = [
     ("Read data sources", "datasource", "read"),
     ("Write data sources", "datasource", "write"),
     ("Admin functions", "admin", None),
+    ("Reports (read) / feedback (write)", "endpoint", None),
 ]
 
 
@@ -86,7 +87,8 @@ def render(rules: list[tuple[str, str, str]]) -> str:
         "## Resource and action vocabulary",
         "",
         "- Resources: `model:<id>`, `tool:<id>`, `datasource:<id>`, `admin:<area>` "
-        "(`admin:roles`, `admin:api-keys`).",
+        "(`admin:roles`, `admin:api-keys`), `endpoint:<name>` (`endpoint:reports`, "
+        "`endpoint:feedback`).",
         "- Actions: `invoke`, `read`, `write`, `admin`.",
         "- Patterns are globs (`model:small-*`). Request-supplied identifiers may not contain "
         "wildcards.",

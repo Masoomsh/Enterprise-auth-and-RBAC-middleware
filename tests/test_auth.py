@@ -63,7 +63,7 @@ def test_valid_token_maps_groups_to_roles_and_scopes(provider):
 
 
 def test_disabled_without_config():
-    assert OAuth2BearerProvider(Settings()).enabled is False
+    assert OAuth2BearerProvider(Settings(_env_file=None)).enabled is False
 
 
 @pytest.mark.parametrize(

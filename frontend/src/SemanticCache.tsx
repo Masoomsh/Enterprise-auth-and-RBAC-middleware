@@ -4,6 +4,13 @@ import { signOut, useSessionContext } from "supertokens-auth-react/recipe/sessio
 
 const API = import.meta.env.VITE_API_DOMAIN;
 
+const SUGGESTIONS = [
+  "Explain semantic caching in one paragraph",
+  "What is the capital of France?",
+  "Write a haiku about the ocean",
+  "Summarise the benefits of RBAC",
+];
+
 type Turn = {
   role: "user" | "assistant";
   content: string;
@@ -178,13 +185,35 @@ export default function SemanticCache() {
 
       <section className="sc-chat" aria-label="Conversation">
         {turns.length === 0 && (
-          <p className="status">
-            Ask something. To see a cache HIT, click New chat and ask the same question again (a follow-up in the same chat is a different prompt).
-          </p>
+          <div className="sc-empty">
+            <p className="status">
+              Ask something, or try a suggestion. To see a cache HIT, click New chat and ask the same question again.
+            </p>
+            <div className="sc-chips">
+              {SUGGESTIONS.map((s) => (
+                <button key={s} type="button" className="sc-chip" onClick={() => setInput(s)}>
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
         )}
         {turns.map((turn, index) => (
           <div key={index} className={`sc-turn ${turn.role}`}>
-            <div className="sc-bubble">{turn.content}</div>
+            <div className="sc-bubble">
+              {turn.content}
+              {turn.role === "assistant" && (
+                <button
+                  type="button"
+                  className="sc-copy"
+                  onClick={() => void navigator.clipboard?.writeText(turn.content)}
+                  aria-label="Copy answer"
+                  title="Copy answer"
+                >
+                  Copy
+                </button>
+              )}
+            </div>
             {turn.meta && (
               <div className="sc-meta">
                 <span className={`sc-badge ${turn.meta.cache.toLowerCase()}`}>{turn.meta.cache}</span>
@@ -212,7 +241,11 @@ export default function SemanticCache() {
             )}
           </div>
         ))}
-        {busy && <p className="status">Routing your request…</p>}
+        {busy && (
+          <div className="sc-typing" aria-label="Routing your request">
+            <span /><span /><span />
+          </div>
+        )}
         <div ref={endRef} />
       </section>
 

@@ -15,3 +15,10 @@ database/
 # Semantic gateway runtime data
 data/*
 !data/.gitkeep
+
+# SDK build and tool output
+sdk/dist/
+sdk/build/
+*.egg-info/
+.mypy_cache/
+.ruff_cache/

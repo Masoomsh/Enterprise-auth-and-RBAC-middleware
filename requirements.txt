@@ -19,3 +19,4 @@ alembic==1.20.1
 litellm==1.106.6
 pytest==9.2.0
 pytest-asyncio==1.4.1.post1
+jsonschema==4.26.0

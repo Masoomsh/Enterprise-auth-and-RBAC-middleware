@@ -20,7 +20,9 @@ from dataclasses import dataclass
 from typing import Any
 
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Request, Response
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
+from jsonschema import Draft202012Validator, ValidationError as SchemaError
+from jsonschema.exceptions import SchemaError as BadSchema
 from pydantic import BaseModel, Field
 
 from app.authentication.base import Identity
@@ -65,6 +67,9 @@ class ChatRequest(BaseModel):
     temperature: float | None = None
     top_p: float | None = None
     max_tokens: int | None = None
+    # {"type": "json_object"} or {"type": "json_schema", "json_schema": {"schema": {...}}}.
+    # The reply must parse as JSON (and match the schema) or the call fails with 422.
+    response_format: dict[str, Any] | None = None
     # Names of tools / data sources this call intends to use; each is checked against RBAC.
     tools: list[str] = Field(default_factory=list)
     data_sources: list[str] = Field(default_factory=list)
@@ -202,12 +207,14 @@ class SemanticGateway:
             authorize_all(request, identity, checks, auth_settings)
 
             active = get_runtime()
-            if payload.stream:
-                raise HTTPException(status_code=400, detail="Streaming responses are not supported")
             if any(m.role not in {"system", "user", "assistant"} for m in payload.messages):
                 raise HTTPException(status_code=422, detail="Messages must use system, user, or assistant roles")
 
+            output_schema = _output_schema(payload.response_format)
             messages = [m.model_dump() for m in payload.messages]
+            if output_schema is not None:
+                # Part of the prompt, so it is also part of the cache scope.
+                messages.insert(0, {"role": "system", "content": _format_instruction(output_schema)})
             prompt = json.dumps(messages, ensure_ascii=False, separators=(",", ":"))
             user_text = "\n".join(m.content for m in payload.messages if m.role == "user")
 
@@ -263,6 +270,7 @@ class SemanticGateway:
 
             cache_hit = entry is not None
             model = decision.model
+            invalid_output = False
             if entry is None:
                 try:
                     result = await active.ollama.chat(model, messages, options)
@@ -271,11 +279,19 @@ class SemanticGateway:
                         int(result.get("prompt_eval_count", 0)),
                         int(result.get("eval_count", 0)),
                     )
-                    if not bypass and vector is not None:
+                    if output_schema is not None and not _matches_schema(entry.content, output_schema):
+                        invalid_output = True
+                    elif not bypass and vector is not None:
                         await active.cache.store(vector, scope_id, decision.category, model, entry)
                 except Exception as exc:
                     logger.exception("Model request failed for request %s", request_id)
                     raise HTTPException(status_code=502, detail="Model request failed") from exc
+                if invalid_output:
+                    # Not cached and not returned: the caller asked for a shape the model missed.
+                    meta["output_invalid"] = True
+                    raise HTTPException(
+                        status_code=422, detail="Model output did not match response_format"
+                    )
 
             input_rate, output_rate = active.router.price(model, config.model_prices)
             baseline_input_rate, baseline_output_rate = active.router.price(
@@ -312,11 +328,26 @@ class SemanticGateway:
                 },
                 actual_cost=actual_cost,
             )
-            response.headers["x-cache"] = "HIT" if cache_hit else ("BYPASS" if bypass else "MISS")
-            response.headers["x-request-id"] = request_id
-            response.headers["x-routed-model"] = model
-            response.headers["x-query-complexity"] = decision.category
-            response.headers["x-experiment-arm"] = decision.arm
+            headers = {
+                "x-cache": "HIT" if cache_hit else ("BYPASS" if bypass else "MISS"),
+                "x-request-id": request_id,
+                "x-routed-model": model,
+                "x-query-complexity": decision.category,
+                "x-experiment-arm": decision.arm,
+            }
+            usage = {
+                "prompt_tokens": entry.prompt_tokens,
+                "completion_tokens": entry.completion_tokens,
+                "total_tokens": entry.prompt_tokens + entry.completion_tokens,
+            }
+            if payload.stream:
+                meta["stream"] = True
+                return StreamingResponse(
+                    _sse(request_id, model, entry.content, usage),
+                    media_type="text/event-stream",
+                    headers={**headers, "cache-control": "no-cache"},
+                )
+            response.headers.update(headers)
             return {
                 "id": request_id,
                 "object": "chat.completion",
@@ -332,6 +363,23 @@ class SemanticGateway:
                     "total_tokens": entry.prompt_tokens + entry.completion_tokens,
                 },
             }
+
+        @router.get("/v1/models")
+        async def list_models(identity: Identity = Depends(get_identity)) -> dict[str, Any]:
+            """Models this caller may invoke (the same check the chat route applies)."""
+            names = {config.simple_model, config.reasoning_model, config.coding_model,
+                     config.baseline_model, *config.model_prices}
+            for models in config.model_candidates.values():
+                names.update(models)
+            allowed = []
+            for name in sorted(names):
+                try:
+                    resource = concrete_resource("model", name)
+                except ValueError:
+                    continue
+                if get_engine().check(identity, resource, "invoke").allowed:
+                    allowed.append({"id": name, "object": "model"})
+            return {"object": "list", "data": allowed}
 
         reports = Depends(require("endpoint:reports", "read"))
 
@@ -432,6 +480,59 @@ DASHBOARD_HTML = """<!doctype html>
   </script>
 </body>
 </html>"""
+
+
+def _output_schema(response_format: dict[str, Any] | None) -> dict[str, Any] | None:
+    """JSON schema the reply must satisfy, or None when no structured output was requested."""
+    if response_format is None:
+        return None
+    kind = response_format.get("type")
+    if kind == "json_object":
+        return {"type": "object"}
+    schema = (response_format.get("json_schema") or {}).get("schema") if kind == "json_schema" else None
+    if not isinstance(schema, dict):
+        raise HTTPException(status_code=422, detail="Unsupported response_format")
+    try:
+        Draft202012Validator.check_schema(schema)
+    except BadSchema as exc:
+        raise HTTPException(status_code=422, detail="response_format schema is not valid JSON Schema") from exc
+    return schema
+
+
+def _format_instruction(schema: dict[str, Any]) -> str:
+    return (
+        "Reply with a single JSON value only, no prose and no code fences. "
+        "It must validate against this JSON Schema: "
+        + json.dumps(schema, separators=(",", ":"), ensure_ascii=False)
+    )
+
+
+def _matches_schema(content: str, schema: dict[str, Any]) -> bool:
+    text = content.strip()
+    if text.startswith("```"):  # tolerate a fenced block from chatty models
+        text = re.sub(r"^```[a-zA-Z]*\s*|\s*```$", "", text).strip()
+    try:
+        Draft202012Validator(schema).validate(json.loads(text))
+    except (ValueError, SchemaError):
+        return False
+    return True
+
+
+async def _sse(request_id: str, model: str, content: str, usage: dict[str, int]):
+    """OpenAI-style server-sent events. The answer is already complete (cache or model), so it
+    is replayed in small chunks; the wire format is what clients rely on."""
+    def event(delta: dict[str, Any], finish: str | None = None, extra: dict[str, Any] | None = None) -> str:
+        body = {
+            "id": request_id, "object": "chat.completion.chunk", "model": model,
+            "choices": [{"index": 0, "delta": delta, "finish_reason": finish}], **(extra or {}),
+        }
+        return f"data: {json.dumps(body, ensure_ascii=False)}\n\n"
+
+    yield event({"role": "assistant"})
+    for piece in re.findall(r"\S+\s*|\s+", content):
+        yield event({"content": piece})
+    yield event({}, "stop", {"usage": usage})
+    yield "data: [DONE]\n\n"
 
 
 def _configure_system_trust() -> None:

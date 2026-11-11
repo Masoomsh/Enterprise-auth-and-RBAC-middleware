@@ -1,0 +1,16 @@
+# gw eval examples/cases.yaml --local
+- name: answers-the-question
+  prompt: Say hello to the team
+  expect:
+    contains: ["hello"]
+    max_latency_s: 10
+
+- name: second-call-is-cached
+  prompt: Say hello to the team
+  expect:
+    cache: HIT
+
+- name: matches-a-pattern
+  prompt: Reply with the word ready
+  expect:
+    regex: "(?i)ready"
